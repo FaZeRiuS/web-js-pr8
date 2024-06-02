@@ -3,26 +3,59 @@ const itemCountSpan = document.getElementById('item-count')
 const uncheckedCountSpan = document.getElementById('unchecked-count')
 
 let todos = [];
-let id = 100;
 
 window.onload = () => {
-  const storedTodos = JSON.parse(localStorage.getItem('todos')) || [];
-  if (storedTodos.length > 0) {
-    todos = storedTodos;
-    id = Math.max(...todos.map(todo => todo.id)) + 1;
-  }
-  render();
-}
+  loadTodosFromDatabase();
+};
 
 function newTodo() {
-  let text = prompt("Enter TODO")
+  let text = prompt("Enter TODO");
   if (text) {
-    let todo = { id: id++, text: text, checked: false }
-    todos.push(todo)
-    console.log(todos)
-    saveTodos();
-    render();
+    const todo = { text: text, checked: false };
+    addTodoToDatabase(todo);
   }
+}
+
+function addTodoToDatabase(todo) {
+  fetch('https://prz9-aadb7-default-rtdb.europe-west1.firebasedatabase.app/todos.json', {
+    method: 'POST',
+    body: JSON.stringify(todo),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log("Todo added successfully:", data);
+    const todoId = data.name;
+    todo.id = todoId;
+    todos.push(todo); 
+    render();  
+  })
+  .catch(error => {
+    console.error("Error adding todo:", error);
+  });
+}
+
+
+function loadTodosFromDatabase() {
+  document.getElementById('loading-message').style.display = 'block';
+  fetch('https://prz9-aadb7-default-rtdb.europe-west1.firebasedatabase.app/todos.json')
+  .then(response => response.json())
+  .then(data => {
+    todos = [];
+    for (let key in data) {
+      let todo = data[key];
+      todo.id = key;
+      todos.push(todo);
+    }
+    render();
+    document.getElementById('loading-message').style.display = 'none';
+  })
+  .catch(error => {
+    document.getElementById('loading-message').style.display = 'none';
+    document.getElementById('error-message').innerText = "Error loading todos: " + error.message;
+  });
 }
 
 function render() {
@@ -31,31 +64,54 @@ function render() {
 }
 
 function renderTodo(todo) {
-  return ` <li class="list-group-item">
-  <input type="checkbox" class="form-check-input me-2" id="${todo.id}" ${todo.checked ? "checked" : ""} onChange = "checkTodo(${todo.id})"/>
-  <label for="${todo.id}"><span class="${todo.checked ? "text-success text-decoration-line-through" : ""}">${todo.text}</span></label>
-  <button class="btn btn-danger btn-sm float-end" OnClick = "deleteTodo(${todo.id})">delete</button>
-</li>`
+  return `<li class="list-group-item">
+    <input type="checkbox" class="form-check-input me-2" id="${todo.id}" ${todo.checked ? "checked" : ""} onChange="checkTodo('${todo.id}')"/>
+    <label for="${todo.id}"><span class="${todo.checked ? "text-success text-decoration-line-through" : ""}">${todo.text}</span></label>
+    <button class="btn btn-danger btn-sm float-end" onClick="deleteTodo('${todo.id}')">delete</button>
+  </li>`;
 }
 
 function updateCounter() {
   itemCountSpan.textContent = todos.length;
-  uncheckedCountSpan.textContent = todos.filter(todo => !todo.checked).length
+  uncheckedCountSpan.textContent = todos.filter(todo => !todo.checked).length;
 }
 
 function deleteTodo(id) {
-  todos = todos.filter(todo => todo.id !== id);
-  saveTodos();
-  render();
+  fetch(`https://prz9-aadb7-default-rtdb.europe-west1.firebasedatabase.app/todos/${id}.json`, {
+    method: 'DELETE'
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log("Todo deleted successfully:", data);
+    loadTodosFromDatabase();
+  })
+  .catch(error => {
+    console.error("Error deleting todo:", error);
+  });
 }
 
 function checkTodo(id) {
-  console.log("from onchange", id)
-  todos = todos.map(todo => (todo.id === id ? { ...todo, checked: !todo.checked } : todo));
-  saveTodos();
-  render();
+  const todo = todos.find(todo => todo.id === id);
+  if (todo) {
+    todo.checked = !todo.checked;
+    updateTodoInDatabase(id, todo);
+  }
 }
 
-function saveTodos() {
-  localStorage.setItem('todos', JSON.stringify(todos));
+function updateTodoInDatabase(id, todo) {
+  fetch(`https://prz9-aadb7-default-rtdb.europe-west1.firebasedatabase.app/todos/${id}.json`, {
+    method: 'PATCH',
+    body: JSON.stringify(todo),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log("Todo updated successfully:", data);
+    loadTodosFromDatabase();
+  })
+  .catch(error => {
+    console.error("Error updating todo:", error);
+  });
 }
